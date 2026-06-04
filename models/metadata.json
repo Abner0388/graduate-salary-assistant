@@ -1,0 +1,140 @@
+{
+  "feature_names": [
+    "branch_Civil",
+    "branch_ECE",
+    "branch_EEE",
+    "branch_IT",
+    "branch_Mechanical",
+    "cgpa",
+    "coding_score",
+    "communication_score",
+    "aptitude_score",
+    "internships",
+    "projects",
+    "backlogs",
+    "resume_score",
+    "skill_score",
+    "college_tier",
+    "python_skill",
+    "dsa_skill",
+    "ml_skill",
+    "web_dev_skill"
+  ],
+  "branch_categories": [
+    "CSE",
+    "Civil",
+    "ECE",
+    "EEE",
+    "IT",
+    "Mechanical"
+  ],
+  "branch_reference": "CSE",
+  "numerical_cols": [
+    "cgpa",
+    "coding_score",
+    "communication_score",
+    "aptitude_score",
+    "internships",
+    "projects",
+    "backlogs",
+    "resume_score",
+    "skill_score"
+  ],
+  "ordinal_cols": [
+    "college_tier"
+  ],
+  "binary_cols": [
+    "python_skill",
+    "dsa_skill",
+    "ml_skill",
+    "web_dev_skill"
+  ],
+  "log_transform": true,
+  "feature_importance": [
+    {
+      "feature": "skill_score",
+      "importance": 0.876069
+    },
+    {
+      "feature": "college_tier",
+      "importance": 0.056228
+    },
+    {
+      "feature": "coding_score",
+      "importance": 0.012798
+    },
+    {
+      "feature": "resume_score",
+      "importance": 0.007131
+    },
+    {
+      "feature": "internships",
+      "importance": 0.006816
+    },
+    {
+      "feature": "projects",
+      "importance": 0.004355
+    },
+    {
+      "feature": "python_skill",
+      "importance": 0.004203
+    },
+    {
+      "feature": "web_dev_skill",
+      "importance": 0.003933
+    },
+    {
+      "feature": "cgpa",
+      "importance": 0.003892
+    },
+    {
+      "feature": "communication_score",
+      "importance": 0.003556
+    },
+    {
+      "feature": "branch_Civil",
+      "importance": 0.003335
+    },
+    {
+      "feature": "backlogs",
+      "importance": 0.00326
+    },
+    {
+      "feature": "branch_EEE",
+      "importance": 0.003207
+    },
+    {
+      "feature": "aptitude_score",
+      "importance": 0.003079
+    },
+    {
+      "feature": "dsa_skill",
+      "importance": 0.002829
+    },
+    {
+      "feature": "branch_ECE",
+      "importance": 0.002063
+    },
+    {
+      "feature": "ml_skill",
+      "importance": 0.001439
+    },
+    {
+      "feature": "branch_IT",
+      "importance": 0.000979
+    },
+    {
+      "feature": "branch_Mechanical",
+      "importance": 0.000827
+    }
+  ],
+  "metrics": {
+    "r2": 0.6297,
+    "mae": 7.9,
+    "rmse": 10.14,
+    "mape": 12.04,
+    "mean_actual_salary": 64.93,
+    "mean_predicted_salary": 64.30000305175781,
+    "n_test_samples": 1541
+  }
+}

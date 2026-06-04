@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"mkdir d:\\\\桌面\\\\llm\\\\agent\\\\data 2>nul & mkdir d:\\\\桌面\\\\llm\\\\agent\\\\models 2>nul & mkdir d:\\\\桌面\\\\llm\\\\agent\\\\src 2>nul & copy d:\\\\桌面\\\\llm\\\\agent\\\\student_placement_salary_elite_v2.csv d:\\\\桌面\\\\llm\\\\agent\\\\data\\\\student_placement_salary_elite_v2.csv\")",
+      "Bash(pip list *)",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Read(//usr/**)",
+      "Bash(ls /c/Python*)",
+      "Read(//c/Users/DELL/AppData/Local/Programs/Python//**)",
+      "Read(//mnt/c/Users/DELL/AppData/Local/Programs/**)",
+      "Read(//mnt/c/**)",
+      "Read(//c/Users/DELL/**)",
+      "Read(//c//**)",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" --version)",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" -m pip install xgboost scikit-learn pandas numpy joblib matplotlib seaborn openai streamlit --quiet)",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" -c \"import pandas; import numpy; import sklearn; import xgboost; import joblib; import matplotlib; import seaborn; import openai; import streamlit; print\\('All packages available!'\\)\")",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pandas numpy scikit-learn xgboost joblib matplotlib seaborn openai streamlit --trusted-host pypi.tuna.tsinghua.edu.cn)",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" -c \"import pandas; import numpy; import sklearn; import xgboost; import joblib; import matplotlib; import seaborn; import openai; print\\('Core packages OK'\\)\")",
+      "Bash(\"C:/Users/DELL/AppData/Local/Programs/Python/Python311/python.exe\" -c \"import streamlit; print\\('Streamlit OK'\\)\")"
+    ]
+  }
+}
