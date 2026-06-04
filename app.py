@@ -126,8 +126,8 @@ if not st.session_state.data_loaded:
 
 # ── Sidebar ───────────────────────────────────────────
 with st.sidebar:
-    st.image("🎓", width=60)  # emoji as placeholder logo
-    st.title("薪资分析助手")
+    st.markdown("<h1 style='text-align:center;font-size:60px;'>🎓</h1>", unsafe_allow_html=True)
+    st.markdown("### 薪资分析助手")
     st.caption("基于 9000 名工程毕业生的就业数据")
 
     st.divider()
