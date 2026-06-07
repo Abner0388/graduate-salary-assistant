@@ -595,9 +595,7 @@ with tab5:
 
             # Use ChatLLMClient with streaming
             sys_prompt = chat_system_prompt()
-            full_user_msg = f"{user_input}
-
-[数据上下文] {stats_context}"
+            full_user_msg = f"{user_input}\n\n[数据上下文] {stats_context}"
 
             response_placeholder = st.empty()
             streamed_text = ""
