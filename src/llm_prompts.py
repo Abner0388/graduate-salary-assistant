@@ -6,8 +6,13 @@ import json
 from .config import FEATURE_DISPLAY_NAMES, BRANCHES
 
 
-def explain_prediction(student: dict, prediction: dict) -> tuple[str, str]:
+def explain_prediction(
+    student: dict, prediction: dict, rag_context: str = ""
+) -> tuple[str, str]:
     """Generate a prompt to explain an individual salary prediction."""
+    # Inject RAG context into system prompt if provided
+    rag_block = f"\n\n[参考数据]\n{rag_context}" if rag_context else ""
+
     # Map feature values to Chinese display names
     profile_lines = []
     name_map = FEATURE_DISPLAY_NAMES
@@ -28,6 +33,7 @@ def explain_prediction(student: dict, prediction: dict) -> tuple[str, str]:
     system = (
         "你是一名资深职业顾问兼数据科学专家，专精于分析毕业生薪资预测模型的结果。"
         "你需要用中文回复，语言亲切、专业、有鼓励性。回复不超过 200 字。"
+        f"{rag_block}"
     )
 
     user = f"""一位学生的个人资料如下：
@@ -49,8 +55,11 @@ def explain_prediction(student: dict, prediction: dict) -> tuple[str, str]:
     return system, user
 
 
-def explain_factor_importance(importance_data: list[dict]) -> tuple[str, str]:
+def explain_factor_importance(
+    importance_data: list[dict], rag_context: str = ""
+) -> tuple[str, str]:
     """Generate a prompt to narrate feature importance findings."""
+    rag_block = f"\n\n[数据集统计]\n{rag_context}" if rag_context else ""
     top_features = importance_data[:10]
     features_str = "\n".join(
         f"{i+1}. {f['feature']}: {f['importance']:.6f}"
@@ -60,6 +69,7 @@ def explain_factor_importance(importance_data: list[dict]) -> tuple[str, str]:
     system = (
         "你是一名数据科学教育者，擅长用通俗易懂的语言解释机器学习模型的结果。"
         "请用中文回复，控制在 250 字以内。"
+        f"{rag_block}"
     )
 
     user = f"""我们的薪资预测模型（基于 9000 名工程毕业生的数据训练）显示出以下前 10 个最重要的影响因素及其重要性分数：
@@ -76,8 +86,10 @@ def generate_advice(
     student: dict,
     base_salary: float,
     gains: list[dict],
+    rag_context: str = "",
 ) -> tuple[str, str]:
     """Generate a prompt for personalized career improvement advice."""
+    rag_block = f"\n\n[参考数据]\n{rag_context}" if rag_context else ""
     profile_lines = []
     name_map = FEATURE_DISPLAY_NAMES
     for key, val in student.items():
@@ -92,6 +104,7 @@ def generate_advice(
     system = (
         "你是一名富有同理心的工程类毕业生职业顾问。你的建议应该具体、可操作、有优先级。"
         "用中文回复，控制在 300 字以内，鼓励性语气。"
+        f"{rag_block}"
     )
 
     user = f"""一位 {student.get('branch', '未知专业')} 专业的学生，当前预测薪资为 **{base_salary} LPA**。

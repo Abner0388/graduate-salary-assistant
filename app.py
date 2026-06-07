@@ -24,6 +24,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── Apply custom theme (Phase 1) ─────────────────────
+from src.ui_theme import apply_custom_theme
+apply_custom_theme()
+
 # ── Load secrets before importing config ──────────────
 # Read API key from Streamlit Secrets (for Streamlit Cloud) or local secrets.toml
 try:
@@ -44,15 +48,25 @@ from src.factor_analysis import (
     counterfactual_gains, compare_branches, compare_skills,
     compare_tiers, get_group_stats,
 )
-from src.llm_client import ask_deepseek, ask_deepseek_stream
+from src.llm_client import ask_deepseek, ask_deepseek_stream, ChatLLMClient
+from src.memory import ChatMemory
+from src.context_manager import ContextManager
 from src.llm_prompts import (
     explain_prediction, explain_factor_importance,
     generate_advice, chat_system_prompt,
 )
+from src.rag import (
+    load_corpus as load_rag_corpus,
+    retrieve_similar_profiles,
+    format_retrieved_context,
+)
+from src.memory import SessionMemory
 from src.ui_components import (
     render_student_input_form, render_prediction_result,
     render_factor_bar_chart, render_comparison_chart,
     render_comparison_table, show_llm_section, show_dataset_overview,
+    render_card_form, render_radar_chart, render_salary_comparison_gauge,
+    render_context_indicator,
 )
 
 
@@ -71,6 +85,16 @@ def init_session_state():
         "stats": None,
         "student_a": {},
         "student_b": {},
+        # Session memory keys (Phase 2)
+        "sm_profile": None,
+        "sm_prediction": None,
+        # RAG corpus (Phase 3)
+        "rag_corpus": None,
+        "rag_ready": False,
+        # Chat memory & context (Phase 4)
+        "chat_memory": None,
+        "context_manager": None,
+        "chat_client": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -95,6 +119,12 @@ def load_dataset():
     df = load_data(DATA_PATH)
     stats = get_dataset_stats(df)
     return df, stats
+
+
+@st.cache_resource
+def load_rag_corpus_cached():
+    """Load and cache the RAG corpus (TF-IDF index + aggregates)."""
+    return load_rag_corpus()
 
 
 @st.cache_data
@@ -122,6 +152,23 @@ if not st.session_state.data_loaded:
     st.session_state.df = df
     st.session_state.stats = stats
     st.session_state.data_loaded = True
+
+# Initialize RAG corpus (Phase 3) — runs once, cached
+if not st.session_state.rag_ready and st.session_state.data_loaded:
+    try:
+        st.session_state.rag_corpus = load_rag_corpus_cached()
+        st.session_state.rag_ready = True
+    except Exception:
+        st.session_state.rag_corpus = None
+        st.session_state.rag_ready = True  # Don't retry
+
+# Initialize Chat Memory + Context Manager (Phase 4)
+if st.session_state.chat_memory is None:
+    st.session_state.chat_memory = ChatMemory()
+    st.session_state.context_manager = ContextManager(st.session_state.chat_memory)
+    st.session_state.chat_client = ChatLLMClient(
+        st.session_state.chat_memory, st.session_state.context_manager
+    )
 
 
 # ── Sidebar ───────────────────────────────────────────
@@ -183,7 +230,8 @@ with tab1:
     col_input, col_result = st.columns([1, 1], gap="large")
 
     with col_input:
-        student = render_student_input_form(prefix="tab1_")
+        # Use card-based form (Phase 5)
+        student = render_card_form(prefix="tab1_")
 
         predict_btn = st.button("🔮 预测薪资", type="primary", use_container_width=True,
                                 disabled=not st.session_state.model_loaded)
@@ -200,12 +248,49 @@ with tab1:
                 )
                 st.session_state.last_prediction = prediction
                 st.session_state.last_student = student
+                # Persist profile across tabs (Phase 2)
+                SessionMemory.save_profile(student)
+                SessionMemory.save_prediction(prediction)
 
             render_prediction_result(prediction)
 
-            # LLM explanation
+            # Radar chart + Salary gauge (Phase 5)
+            radar_skills = {
+                "Python": student.get("python_skill", 0),
+                "DSA": student.get("dsa_skill", 0),
+                "ML": student.get("ml_skill", 0),
+                "WebDev": student.get("web_dev_skill", 0),
+                "实习/项目": min(
+                    (student.get("internships", 0) + student.get("projects", 0)) / 10, 1.0
+                ),
+            }
+            render_radar_chart(radar_skills, "技能画像")
+
+            # Benchmark: median salary from stats
+            benchmark = st.session_state.stats.get("median_salary", 50) if st.session_state.stats else 50
+            render_salary_comparison_gauge(
+                prediction["predicted_salary_lpa"],
+                benchmark,
+                "预测薪资 vs 数据集中位数",
+            )
+
+            # LLM explanation with RAG context (Phase 3)
             with st.spinner("AI 正在解读预测结果..."):
-                sys_prompt, user_msg = explain_prediction(student, prediction)
+                # Retrieve similar profiles from corpus
+                rag_context = ""
+                if st.session_state.rag_corpus:
+                    try:
+                        similar = retrieve_similar_profiles(
+                            student, st.session_state.rag_corpus
+                        )
+                        rag_context = format_retrieved_context(
+                            similar, st.session_state.rag_corpus
+                        )
+                    except Exception:
+                        rag_context = ""
+                sys_prompt, user_msg = explain_prediction(
+                    student, prediction, rag_context=rag_context
+                )
                 llm_response = ask_deepseek(sys_prompt, user_msg)
 
             st.divider()
@@ -249,7 +334,24 @@ with tab2:
 
             if st.button("🔄 生成 AI 分析", key="tab2_llm", type="primary"):
                 with st.spinner("AI 分析中..."):
-                    sys_prompt, user_msg = explain_factor_importance(importance_data)
+                    # RAG: aggregate stats (Phase 3)
+                    rag_context = ""
+                    if st.session_state.rag_corpus:
+                        try:
+                            from src.rag import retrieve_aggregate_stats
+                            agg = retrieve_aggregate_stats(
+                                "all", st.session_state.rag_corpus
+                            )
+                            # Format as compact summary
+                            lines = ["[数据集统计]\n"]
+                            for b, s in agg.get("by_branch", {}).items():
+                                lines.append(f"{b}专业 均薪{s['mean']}LPA")
+                            rag_context = "; ".join(lines[:8])
+                        except Exception:
+                            rag_context = ""
+                    sys_prompt, user_msg = explain_factor_importance(
+                        importance_data, rag_context=rag_context
+                    )
                     llm_response = ask_deepseek(sys_prompt, user_msg)
                     st.session_state.factor_llm_response = llm_response
 
@@ -375,7 +477,10 @@ with tab4:
     col_form, col_advice = st.columns([1, 1], gap="large")
 
     with col_form:
-        student_imp = render_student_input_form(prefix="imp_")
+        # Pre-fill from session memory if available (Phase 2)
+        saved_profile = SessionMemory.get_profile()
+        imp_defaults = saved_profile if saved_profile else None
+        student_imp = render_card_form(prefix="imp_", defaults=imp_defaults)
 
         analyze_btn = st.button("💡 分析提升空间", type="primary", use_container_width=True,
                                 disabled=not st.session_state.model_loaded)
@@ -403,10 +508,22 @@ with tab4:
                 display_df.columns = ["因素", "当前值", "改善后", "预期薪资提升(LPA)"]
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-            # LLM advice
+            # LLM advice with RAG context (Phase 3)
             with st.spinner("AI 正在生成个性化建议..."):
+                rag_context = ""
+                if st.session_state.rag_corpus:
+                    try:
+                        similar = retrieve_similar_profiles(
+                            student_imp, st.session_state.rag_corpus
+                        )
+                        rag_context = format_retrieved_context(
+                            similar, st.session_state.rag_corpus
+                        )
+                    except Exception:
+                        rag_context = ""
                 sys_prompt, user_msg = generate_advice(
                     student_imp, base_pred["predicted_salary_lpa"], gains,
+                    rag_context=rag_context,
                 )
                 llm_advice = ask_deepseek(sys_prompt, user_msg)
 
@@ -427,43 +544,86 @@ with tab5:
     st.markdown("### 💬 AI 职业顾问对话")
     st.markdown("与 AI 助手自由对话，询问关于薪资、就业、技能提升等各方面的问题。")
 
-    # Display chat history
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # Display chat history from ChatMemory (Phase 4)
+    for msg in st.session_state.chat_memory.messages:
+        with st.chat_message(msg.role):
+            st.markdown(msg.content)
 
     # Chat input
     if user_input := st.chat_input("输入你的问题，例如：Python 技能对薪资有多大影响？"):
-        # Add user message
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        # Display user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Generate AI response
+        # Generate streaming AI response (Phase 4)
         with st.chat_message("assistant"):
-            with st.spinner("思考中..."):
-                # Build context with dataset stats
-                stats = st.session_state.stats
-                context = ""
-                if stats:
-                    context = (
-                        f"\n\n[系统上下文] 当前数据集包含 {stats['total_students']} 名学生，"
-                        f"就业率 {stats['placement_rate']}%，平均薪资 {stats['avg_salary']:.2f} LPA。"
-                        f"薪资范围 {stats['min_salary']:.2f}-{stats['max_salary']:.2f} LPA。"
+            # Build context
+            stats = st.session_state.stats
+            stats_context = ""
+            if stats:
+                stats_context = (
+                    f"当前数据集包含 {stats['total_students']} 名学生，"
+                    f"就业率 {stats['placement_rate']}%，平均薪资 {stats['avg_salary']:.2f} LPA。"
+                )
+
+            # Profile context from session memory
+            profile_ctx = SessionMemory.profile_to_context(
+                SessionMemory.get_profile()
+            )
+
+            # Auto-summarize if chat history is too long
+            st.session_state.context_manager.maybe_summarize(
+                lambda text: ask_deepseek(
+                    "请用简洁中文总结以下对话要点（不超过150字）",
+                    text,
+                )
+            )
+
+            # Build RAG context if corpus available
+            rag_ctx = ""
+            if st.session_state.rag_corpus and SessionMemory.has_profile():
+                try:
+                    similar = retrieve_similar_profiles(
+                        SessionMemory.get_profile(),
+                        st.session_state.rag_corpus,
                     )
+                    rag_ctx = format_retrieved_context(
+                        similar, st.session_state.rag_corpus
+                    )
+                except Exception:
+                    rag_ctx = ""
 
-                sys_prompt = chat_system_prompt()
-                full_msg = user_input + context
+            # Use ChatLLMClient with streaming
+            sys_prompt = chat_system_prompt()
+            full_user_msg = f"{user_input}
 
-                response_text = ask_deepseek(sys_prompt, full_msg)
-                st.markdown(response_text)
+[数据上下文] {stats_context}"
 
-        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+            response_placeholder = st.empty()
+            streamed_text = ""
+            try:
+                for chunk in st.session_state.chat_client.chat_stream(
+                    user_message=full_user_msg,
+                    system_prompt=sys_prompt,
+                    rag_context=rag_ctx,
+                    profile_context=profile_ctx,
+                ):
+                    streamed_text += chunk
+                    response_placeholder.markdown(streamed_text + "▌")
+                response_placeholder.markdown(streamed_text)
+            except Exception:
+                if not streamed_text:
+                    streamed_text = ask_deepseek(sys_prompt, full_user_msg)
+                    st.markdown(streamed_text)
+
+        # Context usage indicator (Phase 5)
+        tokens_used = st.session_state.context_manager.count_tokens(streamed_text) if streamed_text else 0
+        render_context_indicator(tokens_used, 3500)
 
     # Clear chat button
-    if st.session_state.chat_history:
+    if st.session_state.chat_memory.size() > 0:
         if st.button("🗑️ 清空对话", key="clear_chat"):
-            st.session_state.chat_history = []
+            st.session_state.chat_memory.clear()
             st.rerun()
 
 

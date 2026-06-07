@@ -64,7 +64,19 @@ XGB_PARAM_GRID = {
     "reg_lambda": [1.5],
 }
 
-# Display name mapping for UI
+# ── RAG ──────────────────────────────────────────────────
+RAG_TOP_K = 5                             # Number of similar profiles to retrieve
+RAG_SIMILARITY_THRESHOLD = 0.5            # Minimum cosine similarity to include
+RAG_CONTEXT_MAX_CHARS = 800               # Max characters for RAG context block
+
+# ── Memory & Context ────────────────────────────────────
+MAX_CHAT_MESSAGES = 50                    # Max messages before summarization trigger
+MAX_CONTEXT_TOKENS = 3500                 # Total token budget for LLM context
+ENABLE_CHAT_PERSISTENCE = os.environ.get(
+    "ENABLE_CHAT_PERSISTENCE", "false"
+).lower() == "true"
+
+# ── Display name mapping for UI
 FEATURE_DISPLAY_NAMES = {
     "cgpa": "CGPA",
     "branch": "专业 (Branch)",

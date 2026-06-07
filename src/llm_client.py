@@ -83,6 +83,132 @@ def ask_deepseek(
     return "[AI 回复暂时不可用]"
 
 
+class ChatLLMClient:
+    """
+    Session-aware LLM client that integrates ChatMemory, ContextManager,
+    and RAG for multi-turn conversations with streaming support.
+
+    Usage (Tab 5):
+        chat_client = ChatLLMClient(chat_memory, context_manager)
+        for chunk in chat_client.chat_stream(user_message, system_prompt):
+            yield chunk
+    """
+
+    def __init__(self, chat_memory, context_manager):
+        from .memory.chat_memory import ChatMemory
+        from .context_manager import ContextManager
+        self.chat_memory = chat_memory
+        self.context_manager = context_manager
+
+    def chat(
+        self,
+        user_message: str,
+        system_prompt: str,
+        rag_context: str = "",
+        profile_context: str = "",
+    ) -> str:
+        """
+        Non-streaming chat with full context assembly.
+        Appends user message and response to chat memory.
+        """
+        # Assemble context
+        messages = self.context_manager.build_messages(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            rag_context=rag_context,
+            profile_context=profile_context,
+        )
+
+        # Send to API
+        client = _get_client()
+        for attempt in range(LLM_MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
+                    messages=messages,
+                    temperature=LLM_TEMPERATURE,
+                    max_tokens=800,
+                )
+                reply = response.choices[0].message.content.strip()
+
+                # Persist to memory
+                self.chat_memory.add_message("user", user_message)
+                self.chat_memory.add_message("assistant", reply)
+
+                return reply
+
+            except openai.APITimeoutError:
+                if attempt < LLM_MAX_RETRIES - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+                return "[AI 回复暂时不可用：API 请求超时]"
+
+            except openai.RateLimitError:
+                if attempt < LLM_MAX_RETRIES - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+                    continue
+                return "[AI 回复暂时不可用：API 请求频率过高，请稍后再试]"
+
+            except openai.AuthenticationError:
+                return "[API 密钥无效，请检查 DeepSeek API Key 配置]"
+
+            except Exception as e:
+                if attempt < LLM_MAX_RETRIES - 1:
+                    import time
+                    time.sleep(1)
+                    continue
+                return f"[AI 回复暂时不可用：{str(e)[:100]}]"
+
+        return "[AI 回复暂时不可用]"
+
+    def chat_stream(
+        self,
+        user_message: str,
+        system_prompt: str,
+        rag_context: str = "",
+        profile_context: str = "",
+    ):
+        """
+        Streaming chat — yields text chunks for st.write_stream().
+        Appends the full response to chat memory after streaming completes.
+        """
+        messages = self.context_manager.build_messages(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            rag_context=rag_context,
+            profile_context=profile_context,
+        )
+
+        client = _get_client()
+        full_reply = []
+
+        try:
+            stream = client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=messages,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=800,
+                stream=True,
+            )
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    text = chunk.choices[0].delta.content
+                    full_reply.append(text)
+                    yield text
+
+        except Exception:
+            yield "[AI 回复暂时不可用]"
+            return
+
+        # Persist to memory after streaming
+        reply = "".join(full_reply).strip()
+        if reply:
+            self.chat_memory.add_message("user", user_message)
+            self.chat_memory.add_message("assistant", reply)
+
+
 def ask_deepseek_stream(
     system_prompt: str,
     user_message: str,
